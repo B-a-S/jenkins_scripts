@@ -9,7 +9,7 @@ then
 fi
 
 # Check that you are inside a docker container
-cat /proc/1/cgroup
+### cat /proc/1/cgroup
 
 if [ -z "$WORKSPACE" ]
 then
@@ -20,6 +20,7 @@ fi
 cd "$WORKSPACE"
 export PATH="/hpc/local/bin:/usr/local/bin:/bin:/usr/bin:/usr/sbin:${PATH}"
 
+hca_dev="mlx5_0"
 help_txt_list="${help_txt_list:="oshmem ompi/mca/coll/hcoll ompi/mca/pml/ucx ompi/mca/spml/ucx"}"
 hca_port="${hca_port:=1}"
 ci_test_build=${ci_test_build:="yes"}
@@ -27,7 +28,7 @@ ci_test_examples=${ci_test_examples:="yes"}
 ci_test_oshmem=${ci_test_oshmem:="yes"}
 ci_test_check=${ci_test_check:="yes"}
 ci_test_threads=${ci_test_threads:="no"}
-ci_test_use_ucx_branch=${ci_test_use_ucx_branch:="no"}
+ci_test_use_ucx_branch=${ci_test_use_ucx_branch:="yes"}
 ci_test_ucx_branch=${ci_test_ucx_branch:="master"}
 ci_test_hcoll=${ci_test_hcoll:="yes"}
 
@@ -120,8 +121,8 @@ function mpi_runner()
 
     local mca="${common_mca}"
 
-    for hca_dev in $(ibstat -l)
-    do
+#    for hca_dev in $(ibstat -l)
+#    do
         if [ -f "${exe_path}" ]
         then
             local hca="${hca_dev}:${hca_port}"
@@ -131,7 +132,7 @@ function mpi_runner()
             # shellcheck disable=SC2086
             ${timeout_exe} "$mpirun" --np "$np" $mca --mca pml ucx ${AFFINITY} "${exe_path}" "${exe_args}"
         fi
-    done
+#    done
 }
 
 function oshmem_runner()
@@ -161,8 +162,8 @@ function oshmem_runner()
 
     "${OMPI_HOME}/bin/oshmem_info" -a -l 9
 
-    for hca_dev in $(ibstat -l)
-    do
+#    for hca_dev in $(ibstat -l)
+#    do
         if [ -f "${exe_path}" ]
         then
             local hca="${hca_dev}:${hca_port}"
@@ -171,9 +172,11 @@ function oshmem_runner()
             mca="$mca --mca rmaps_base_dist_hca $hca --mca sshmem_verbs_hca_name $hca"
             echo "Running ${exe_path} ${exe_args}"
             # shellcheck disable=SC2086
-            ${timeout_exe} "$oshrun" --np "$np" $mca "${spml_ucx}" --mca pml ucx --mca btl ^vader,tcp,openib,uct ${AFFINITY} "${exe_path}" "${exe_args}"
+#	    set -x
+            ${timeout_exe} "$oshrun" --np "$np" $mca ${spml_ucx} --mca pml ucx --mca btl ^vader,tcp,openib,uct ${AFFINITY} "${exe_path}" "${exe_args}"
+#	    set +x
         fi
-    done
+#    done
 }
 
 function on_start()
@@ -181,10 +184,12 @@ function on_start()
     echo "Starting on host: $(hostname)"
 
     export distro_name
-    distro_name=$(python -c 'import platform ; print platform.dist()[0]' | tr '[:upper:]' '[:lower:]')
+    distro_name=$(python3 -c "import distro; os_distribution = distro.id(); os_distribution_lower = os_distribution.lower(); print(os_distribution_lower)")
+ ###--->   $(python -c 'import platform ; print platform.dist()[0]' | tr '[:upper:]' '[:lower:]')
 
     export distro_ver
-    distro_ver=$(python  -c 'import platform ; print platform.dist()[1]' | tr '[:upper:]' '[:lower:]')
+    distro_ver=$(python3 -c "import distro; os_version = distro.version(); os_version_lower = os_version.lower(); print(os_version_lower)")
+ ###--->   $(python  -c 'import platform ; print platform.dist()[1]' | tr '[:upper:]' '[:lower:]')
 
     if [ "${distro_name}" = "suse" ]
     then
@@ -376,7 +381,7 @@ then
 
     configure_args="--with-platform=contrib/platform/mellanox/optimized --with-ompi-param-check --enable-picky ${extra_conf}"
 
-    module load hpcx-gcc-stack
+  ###---->  module load hpcx-gcc-stack
 
     if [ "${ci_test_use_ucx_branch}" = "yes" ]
     then
@@ -392,12 +397,16 @@ then
        # `module load hpcx-gcc-stack` will pull the legacy
        # UCX files that will interfere with our custom-built
        # UCX during configuration and the runtime I guess
-       export LD_LIBRARY_PATH="${HPCX_UCX_DIR}/lib:${LD_LIBRARY_PATH}"
+#       export LD_LIBRARY_PATH="${HPCX_UCX_DIR}/lib:${LD_LIBRARY_PATH}"
+	export LD_LIBRARY_PATH="${UCX_DIR}/lib:${LD_LIBRARY_PATH}"
     fi
-
-    export ucx_dir=${HPCX_UCX_DIR}
-
+#pushd ${WORKSPACE}
+#    export ucx_dir=${HPCX_UCX_DIR}
     # build ompi
+#    pwd
+#    echo "=====================================>"
+#    env
+#    echo "=====================================>"
     ${autogen_script}
     echo "./configure ${configure_args} --prefix=${OMPI_HOME}" | bash -xeE
     make "${make_opt}" install
@@ -459,6 +468,7 @@ fi
 
 if [ "${ci_test_threads}" = "yes" ]
 then
+#    set -x
     ci_test_hcoll_bkp="${ci_test_hcoll}"
     exe_dir="${OMPI_HOME}/thread_tests"
 
@@ -469,8 +479,8 @@ then
         cd "${exe_dir}"
 
         # Keep this test locally to avoid future connection problems
-        #wget --no-check-certificate http://www.mcs.anl.gov/~thakur/thread-tests/thread-tests-1.1.tar.gz
-        cp /hpc/local/mpitests/thread-tests-1.1.tar.gz .
+        wget --no-check-certificate http://www.mcs.anl.gov/~thakur/thread-tests/thread-tests-1.1.tar.gz
+     ###--->   cp /hpc/local/mpitests/thread-tests-1.1.tar.gz .
         tar zxf thread-tests-1.1.tar.gz
         cd thread-tests-1.1
         make CC="${OMPI_HOME}/bin/mpicc"
@@ -506,7 +516,8 @@ fi
 for mpit in "${abs_path}"/*.c
 do
     out_name="$(basename "$mpit" .c)"
-    "${OMPI_HOME}/bin/mpicc" -o "${abs_path}/${out_name}" "$mpit"
+#    echo "---------------> LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
+    "${OMPI_HOME}/bin/mpicc" -o "${abs_path}/${out_name}" "$mpit" /GIT/ompi/ompi_install/lib/liboshmem.so
 done
-
+#popd
 test_tune
