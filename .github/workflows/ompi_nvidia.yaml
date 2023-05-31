@@ -1,0 +1,34 @@
+name: ompi_mellanox CI
+on:
+  repository_dispatch:
+    types: [push, pull_request]
+jobs:
+  deployment:
+    runs-on: [self-hosted, linux, x64]
+    steps:
+    - name: show Var ${{ github.event.client_payload.ompi.repository }} ${{ github.event.client_payload.ompi.ref }}
+      run: |
+          echo "${{ toJson(github.event.client_payload.ompi.repository.full_name) }}"
+          echo "${{ github.event.client_payload.ompi.ref }}"
+    
+    - name: Checkout Repository ${{ github.event.client_payload.ompi.repository.full_name }} ${{ github.event.client_payload.ompi.ref }}
+      uses: actions/checkout@v3
+      with:
+          repository: ${{ github.event.client_payload.ompi.repository.full_name }}
+          ref: ${{ github.event.client_payload.ompi.ref }}
+          path: ompi
+    - name: Deployment infrastructure
+      run: /start deploy
+  build_and_test:
+    needs: [deployment]
+    runs-on: [self-hosted, linux, x64]
+    steps:
+    - name: Building OMPI and running tests
+      run: /start build_and_test
+  clean:
+    if: ${{ always() }}
+    needs: [build_and_test]
+    runs-on: [self-hosted, linux, x64]
+    steps:
+    - name: Cleaning
+      run: /start clean
